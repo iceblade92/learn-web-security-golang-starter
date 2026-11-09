@@ -242,6 +242,18 @@ func (handler *authHandler) Logout(responseWriter http.ResponseWriter, request *
 	if challengeToken != "" {
 		clearTOTPLoginChallengeCookie(responseWriter)
 	}
+	current, valid, err := sessions.Current(request, handler.accounts)
+	if err != nil {
+		handler.internalError(responseWriter, request, err)
+		return
+	}
+	if valid {
+		err = handler.accounts.RevokeSession(request.Context(), current.Session.Token)
+		if err != nil {
+			handler.internalError(responseWriter, request, err)
+			return
+		}
+	}
 	http.Redirect(responseWriter, request, "/", http.StatusFound)
 }
 

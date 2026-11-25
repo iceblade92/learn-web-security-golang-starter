@@ -101,6 +101,10 @@ func (handler *Handler) Edit(responseWriter http.ResponseWriter, request *http.R
 	if !found {
 		return
 	}
+	if current.User.ID != review.ID {
+		handler.reviewNotFound(responseWriter)
+		return
+	}
 	if err := handler.renderForm(responseWriter, http.StatusOK, current, review, ""); err != nil {
 		handler.internalError(responseWriter, request, err)
 	}
@@ -113,6 +117,10 @@ func (handler *Handler) Update(responseWriter http.ResponseWriter, request *http
 	}
 	review, found := handler.requireReview(responseWriter, request)
 	if !found {
+		return
+	}
+	if current.User.ID != review.ID {
+		handler.reviewNotFound(responseWriter)
 		return
 	}
 	ratingValue, ratingErr := httpx.FormValue(request, "rating")
@@ -151,6 +159,10 @@ func (handler *Handler) Delete(responseWriter http.ResponseWriter, request *http
 	if !found {
 		return
 	}
+	if review.ID != current.User.ID {
+		handler.reviewNotFound(responseWriter)
+		return
+	}
 	if err := handler.store.Delete(request.Context(), review.ID); err != nil {
 		handler.internalError(responseWriter, request, err)
 		return
@@ -159,8 +171,16 @@ func (handler *Handler) Delete(responseWriter http.ResponseWriter, request *http
 }
 
 func (handler *Handler) requireReview(responseWriter http.ResponseWriter, request *http.Request) (Review, bool) {
+	current, ok := handler.requireAuth(responseWriter, request)
+	if !ok || !handler.verifyCSRF(responseWriter, request, current.Session.CSRFToken) {
+		return Review{}, false
+	}
 	reviewID, valid := httpx.ParseSafeInteger(request.PathValue("id"))
 	if !valid {
+		handler.reviewNotFound(responseWriter)
+		return Review{}, false
+	}
+	if current.User.ID != reviewID {
 		handler.reviewNotFound(responseWriter)
 		return Review{}, false
 	}
